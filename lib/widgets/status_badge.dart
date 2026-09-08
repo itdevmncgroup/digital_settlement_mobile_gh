@@ -13,7 +13,10 @@ Color expenseStatusColor(String status) {
     case 'PENDING_APPROVAL':
     case 'REVIEW_REQUIRED':
       return const Color(0xFFF5A524);
+    case 'REVISION':
+      return const Color(0xFF8B5CF6);
     default:
+      if (status.startsWith('APPROVAL_')) return const Color(0xFFF5A524);
       return const Color(0xFF64748B);
   }
 }

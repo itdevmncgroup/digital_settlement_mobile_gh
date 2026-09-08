@@ -9,11 +9,24 @@ class ParticipantDetail {
   final String category;
   final String name;
   final String? position;
-  ParticipantDetail({required this.category, required this.name, required this.position});
+  final String? agencyId;
+  final String? advertiserId;
+  final String? unitId;
+  ParticipantDetail({
+    required this.category,
+    required this.name,
+    required this.position,
+    required this.agencyId,
+    required this.advertiserId,
+    required this.unitId,
+  });
   factory ParticipantDetail.fromJson(Map<String, dynamic> json) => ParticipantDetail(
         category: json['category'] as String? ?? '',
         name: json['name'] as String? ?? '',
         position: json['position'] as String?,
+        agencyId: json['agencyId'] as String?,
+        advertiserId: json['advertiserId'] as String?,
+        unitId: json['unitId'] as String?,
       );
 }
 
@@ -48,6 +61,10 @@ class ExpenseDetail {
   final List<SimpleRef> extraAdvertisers;
   final List<SimpleRef> extraBrands;
   final List<ParticipantDetail> participants;
+  // Who the current pending approval step (if any) is resolved to - lets the
+  // detail screen show Approve/Reject only to that person (or an override).
+  final String? approvalResolvedApproverId;
+  final String? approvalPositionName;
 
   ExpenseDetail({
     required this.id,
@@ -80,6 +97,8 @@ class ExpenseDetail {
     required this.extraAdvertisers,
     required this.extraBrands,
     required this.participants,
+    required this.approvalResolvedApproverId,
+    required this.approvalPositionName,
   });
 
   factory ExpenseDetail.fromJson(Map<String, dynamic> json) {
@@ -93,6 +112,21 @@ class ExpenseDetail {
     final settlement = json['settlement'] as Map<String, dynamic>?;
     final bankTransactions = (json['bankTransactions'] as List?) ?? [];
     final matched = bankTransactions.any((t) => ['AUTO_MATCHED', 'MANUAL_MATCHED'].contains((t as Map)['status']));
+
+    final approvalRequest = json['approvalRequest'] as Map<String, dynamic>?;
+    Map<String, dynamic>? currentStep;
+    if (approvalRequest != null && approvalRequest['status'] == 'PENDING') {
+      final steps = (approvalRequest['steps'] as List?) ?? [];
+      for (final s in steps) {
+        final step = s as Map<String, dynamic>;
+        if (step['stepOrder'] == approvalRequest['currentStep']) {
+          currentStep = step;
+          break;
+        }
+      }
+    }
+    final resolvedApprover = currentStep?['resolvedApprover'] as Map<String, dynamic>?;
+    final position = currentStep?['position'] as Map<String, dynamic>?;
 
     return ExpenseDetail(
       id: json['id'] as String,
@@ -131,6 +165,8 @@ class ExpenseDetail {
           .map((e) => SimpleRef.fromJson((e as Map<String, dynamic>)['brand'] as Map<String, dynamic>))
           .toList(),
       participants: (json['participants'] as List? ?? []).map((e) => ParticipantDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      approvalResolvedApproverId: resolvedApprover?['id'] as String?,
+      approvalPositionName: position?['name'] as String?,
     );
   }
 }

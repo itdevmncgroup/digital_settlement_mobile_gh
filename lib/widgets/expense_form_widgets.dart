@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/simple_option.dart';
 
-/// A single Agency/Advertiser attendee row (name + jabatan) - shared between
-/// New Expense and Edit Expense, which both need "add/remove a participant
-/// row" with its own controllers that survive list rebuilds.
+/// A single Agency/Advertiser/Internal attendee row (name + jabatan, plus an
+/// optional linked Agency/Advertiser/Unit id) - shared between New Expense and
+/// Edit Expense, which both need "add/remove a participant row" with its own
+/// controllers that survive list rebuilds.
 class ParticipantEntry {
   final TextEditingController nameController;
   final TextEditingController positionController;
+  String? selectedId;
 
-  ParticipantEntry({String name = '', String position = ''})
+  ParticipantEntry({String name = '', String position = '', this.selectedId})
       : nameController = TextEditingController(text: name),
         positionController = TextEditingController(text: position);
 
@@ -143,14 +145,20 @@ Widget buildMultiSelectField(
   );
 }
 
-/// "+ Add" header plus a name/position row per entry - shared between New
-/// Expense and Edit Expense (Agency/Advertiser Participants sections).
+/// "+ Add" header plus a name/position row (and an optional linked-option
+/// combobox) per entry - shared between New Expense and Edit Expense (Agency/
+/// Advertiser/Internal Participants sections). When [comboOptions] is given,
+/// each row also gets a [comboLabel] dropdown restricted to that list (e.g.
+/// only the Agencies already picked earlier in the same form).
 Widget buildParticipantsSection(
   BuildContext context, {
   required String title,
   required List<ParticipantEntry> entries,
   required VoidCallback onAdd,
   required void Function(int index) onRemove,
+  String? comboLabel,
+  List<SimpleOption>? comboOptions,
+  void Function(int index, String? id)? onComboChanged,
 }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,13 +173,29 @@ Widget buildParticipantsSection(
       for (var i = 0; i < entries.length; i++)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: TextFormField(controller: entries[i].nameController, decoration: const InputDecoration(labelText: 'Name'))),
-              const SizedBox(width: 8),
-              Expanded(child: TextFormField(controller: entries[i].positionController, decoration: const InputDecoration(labelText: 'Position / Jabatan'))),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => onRemove(i)),
+              if (comboOptions != null) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: entries[i].selectedId != null && comboOptions.any((o) => o.id == entries[i].selectedId)
+                      ? entries[i].selectedId
+                      : null,
+                  decoration: InputDecoration(labelText: comboLabel),
+                  items: [for (final o in comboOptions) DropdownMenuItem(value: o.id, child: Text(o.name))],
+                  onChanged: (v) => onComboChanged?.call(i, v),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: TextFormField(controller: entries[i].nameController, decoration: const InputDecoration(labelText: 'Name'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextFormField(controller: entries[i].positionController, decoration: const InputDecoration(labelText: 'Position / Jabatan'))),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => onRemove(i)),
+                ],
+              ),
             ],
           ),
         ),

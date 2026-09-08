@@ -41,6 +41,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   List<SimpleOption> _advertiserOptions = [];
   List<SimpleOption> _brandOptions = [];
   List<SimpleOption> _agencyOptions = [];
+  List<SimpleOption> _unitOptions = [];
   List<Map<String, String>> _creditCardOptions = []; // {id, label}
 
   String? _podId;
@@ -59,6 +60,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
 
   final List<ParticipantEntry> _agencyParticipants = [];
   final List<ParticipantEntry> _advertiserParticipants = [];
+  final List<ParticipantEntry> _internalParticipants = [];
 
   final _picker = ImagePicker();
   final List<XFile> _activityPhotos = [];
@@ -86,6 +88,9 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     for (final p in _advertiserParticipants) {
       p.dispose();
     }
+    for (final p in _internalParticipants) {
+      p.dispose();
+    }
     super.dispose();
   }
 
@@ -101,11 +106,13 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
         api.get('/activity-types'),
         api.get('/advertisers'),
         api.get('/agencies'),
+        api.get('/units'),
       ]);
       _podOptions = (results[0] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _activityTypeOptions = (results[1] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _advertiserOptions = (results[2] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _agencyOptions = (results[3] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
+      _unitOptions = (results[4] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       if (_podOptions.isNotEmpty) _podId = _podOptions.first.id;
     } on ApiException catch (e) {
       _loadError = e.message;
@@ -283,6 +290,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
               'category': 'AGENCY',
               'name': p.nameController.text.trim(),
               if (p.positionController.text.trim().isNotEmpty) 'position': p.positionController.text.trim(),
+              if (p.selectedId != null) 'agencyId': p.selectedId,
             },
         for (final p in _advertiserParticipants)
           if (p.nameController.text.trim().isNotEmpty)
@@ -290,6 +298,15 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
               'category': 'ADVERTISER',
               'name': p.nameController.text.trim(),
               if (p.positionController.text.trim().isNotEmpty) 'position': p.positionController.text.trim(),
+              if (p.selectedId != null) 'advertiserId': p.selectedId,
+            },
+        for (final p in _internalParticipants)
+          if (p.nameController.text.trim().isNotEmpty)
+            {
+              'category': 'EMPLOYEE',
+              'name': p.nameController.text.trim(),
+              if (p.positionController.text.trim().isNotEmpty) 'position': p.positionController.text.trim(),
+              if (p.selectedId != null) 'unitId': p.selectedId,
             },
       ];
 
@@ -391,6 +408,9 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
                         context,
                         title: 'Agency Participants',
                         entries: _agencyParticipants,
+                        comboLabel: 'Agency',
+                        comboOptions: _agencyOptions.where((o) => _agencyIds.contains(o.id)).toList(),
+                        onComboChanged: (i, id) => setState(() => _agencyParticipants[i].selectedId = id),
                         onAdd: () => setState(() => _agencyParticipants.add(ParticipantEntry())),
                         onRemove: (i) => setState(() {
                           _agencyParticipants[i].dispose();
@@ -402,10 +422,28 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
                         context,
                         title: 'Advertiser Participants',
                         entries: _advertiserParticipants,
+                        comboLabel: 'Advertiser',
+                        comboOptions: _advertiserOptions.where((o) => _advertiserIds.contains(o.id)).toList(),
+                        onComboChanged: (i, id) => setState(() => _advertiserParticipants[i].selectedId = id),
                         onAdd: () => setState(() => _advertiserParticipants.add(ParticipantEntry())),
                         onRemove: (i) => setState(() {
                           _advertiserParticipants[i].dispose();
                           _advertiserParticipants.removeAt(i);
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      _sectionTitle('Internal Participant'),
+                      buildParticipantsSection(
+                        context,
+                        title: 'Internal Participants',
+                        entries: _internalParticipants,
+                        comboLabel: 'Unit',
+                        comboOptions: _unitOptions,
+                        onComboChanged: (i, id) => setState(() => _internalParticipants[i].selectedId = id),
+                        onAdd: () => setState(() => _internalParticipants.add(ParticipantEntry())),
+                        onRemove: (i) => setState(() {
+                          _internalParticipants[i].dispose();
+                          _internalParticipants.removeAt(i);
                         }),
                       ),
                       const SizedBox(height: 20),

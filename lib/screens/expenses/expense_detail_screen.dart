@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/expense_detail.dart';
 import '../../services/api_client.dart';
+import '../../services/auth_service.dart';
 import '../../utils/format.dart';
 import '../../widgets/authed_image.dart';
 import '../../widgets/error_view.dart';
@@ -44,8 +45,66 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
 
   void _refresh() => setState(() => _future = _load());
 
+  Future<void> _approve(BuildContext context) async {
+    final api = context.read<ApiClient>();
+    try {
+      await api.post('/approvals/expense/${widget.expenseId}/approve');
+      _refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Approved')));
+      }
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _reject(BuildContext context) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reject expense'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Reason', hintText: 'Why is this being rejected?'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.length < 3) return;
+              Navigator.of(dialogContext).pop(text);
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !context.mounted) return;
+
+    final api = context.read<ApiClient>();
+    try {
+      await api.post('/approvals/expense/${widget.expenseId}/reject', {'reason': reason});
+      _refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rejected')));
+      }
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthService>().user;
     return Scaffold(
       appBar: AppBar(title: const Text('Expense')),
         body: FutureBuilder<ExpenseDetail>(
@@ -60,6 +119,13 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
             final e = snapshot.data!;
             // Only DRAFT (never submitted / never went through approval) is editable.
             final canEdit = e.status == 'DRAFT';
+            // Strictly the resolved approver for the *current* step only - e.g.
+            // while an expense is APPROVAL_BOD only that BOD user sees the
+            // buttons, even for a HEAD POD/ADMIN/expense.approve.* permission
+            // holder who could otherwise override-approve out of turn via the
+            // backend (assertApprovalOverride) or web-admin - the mobile app
+            // deliberately doesn't expose that bypass, only the literal turn.
+            final canApprove = e.approvalResolvedApproverId != null && e.approvalResolvedApproverId == user?.id;
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -177,6 +243,36 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                       ),
                     ),
                 ],
+                if (e.approvalPositionName != null && !canApprove) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Waiting on ${e.approvalPositionName} approval.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  ),
+                ],
+                if (canApprove) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFE5484D)),
+                          onPressed: () => _reject(context),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Reject'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => _approve(context),
+                          icon: const Icon(Icons.check),
+                          label: const Text('Approve'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (canEdit) ...[
                   const SizedBox(height: 24),
                   FilledButton.icon(
@@ -189,7 +285,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit'),
                   ),
-                ] else ...[
+                ] else if (!canApprove && e.approvalPositionName == null) ...[
                   const SizedBox(height: 24),
                   Text(
                     'This expense can no longer be edited (only DRAFT expenses that have never been submitted for approval can be changed).',
