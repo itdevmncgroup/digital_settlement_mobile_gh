@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../models/simple_option.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../utils/invoice_ocr.dart';
 import '../../utils/thousands_formatter.dart';
 import '../../widgets/expense_form_widgets.dart';
 import '../../widgets/photo_tile.dart';
@@ -36,7 +37,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   bool _saving = false;
   String? _saveError;
 
-  List<SimpleOption> _podOptions = [];
+  List<SimpleOption> _departmentOptions = [];
   List<SimpleOption> _activityTypeOptions = [];
   List<SimpleOption> _advertiserOptions = [];
   List<SimpleOption> _brandOptions = [];
@@ -44,7 +45,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   List<SimpleOption> _unitOptions = [];
   List<Map<String, String>> _creditCardOptions = []; // {id, label}
 
-  String? _podId;
+  String? _departmentId;
   List<String> _advertiserIds = [];
   List<String> _brandIds = [];
   List<String> _agencyIds = [];
@@ -66,6 +67,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   final List<XFile> _activityPhotos = [];
   final List<XFile> _invoiceImages = [];
   final _invoiceTotalController = TextEditingController();
+  bool _scanningInvoice = false;
 
   bool get _isAdmin => context.read<AuthService>().user?.hasAnyRole(['ADMIN']) ?? false;
 
@@ -102,18 +104,18 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     final api = context.read<ApiClient>();
     try {
       final results = await Future.wait([
-        api.get('/pods/me'),
+        api.get('/departments/me'),
         api.get('/activity-types'),
         api.get('/advertisers'),
         api.get('/agencies'),
         api.get('/units'),
       ]);
-      _podOptions = (results[0] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
+      _departmentOptions = (results[0] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _activityTypeOptions = (results[1] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _advertiserOptions = (results[2] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _agencyOptions = (results[3] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _unitOptions = (results[4] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
-      if (_podOptions.isNotEmpty) _podId = _podOptions.first.id;
+      if (_departmentOptions.isNotEmpty) _departmentId = _departmentOptions.first.id;
     } on ApiException catch (e) {
       _loadError = e.message;
     } catch (e) {
@@ -147,13 +149,13 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     }
   }
 
-  /// 1 POD = 1 credit card (BR) - only the card(s) assigned to the selected
-  /// POD may be chosen, so the dropdown is re-fetched every time POD changes.
-  /// Super Admin is exempt from the POD restriction and sees every card.
+  /// 1 Department = 1 credit card (BR) - only the card(s) assigned to the selected
+  /// Department may be chosen, so the dropdown is re-fetched every time Department changes.
+  /// Super Admin is exempt from the Department restriction and sees every card.
   Future<void> _loadCreditCards() async {
     final api = context.read<ApiClient>();
     final admin = _isAdmin;
-    if (!admin && _podId == null) {
+    if (!admin && _departmentId == null) {
       setState(() {
         _creditCardOptions = [];
         _creditCardId = null;
@@ -161,7 +163,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
       return;
     }
     try {
-      final path = admin ? '/credit-cards' : '/credit-cards?podId=$_podId';
+      final path = admin ? '/credit-cards' : '/credit-cards?departmentId=$_departmentId';
       final data = await api.get(path) as List;
       if (!mounted) return;
       setState(() {
@@ -233,12 +235,61 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
   Future<void> _addInvoicePhotos() async {
     final source = await _pickSource();
     if (source == null) return;
+    final hadNoInvoiceYet = _invoiceImages.isEmpty;
+    XFile? firstAdded;
     if (source == ImageSource.gallery) {
       final files = await _picker.pickMultiImage(imageQuality: 85);
-      if (files.isNotEmpty) setState(() => _invoiceImages.addAll(files));
+      if (files.isNotEmpty) {
+        setState(() => _invoiceImages.addAll(files));
+        firstAdded = files.first;
+      }
     } else {
       final file = await _picker.pickImage(source: source, imageQuality: 85);
-      if (file != null) setState(() => _invoiceImages.add(file));
+      if (file != null) {
+        setState(() => _invoiceImages.add(file));
+        firstAdded = file;
+      }
+    }
+    // Only auto-read the first invoice photo of the form - later ones are
+    // usually extra pages/angles of the same receipt, not a new one to scan.
+    if (hadNoInvoiceYet && firstAdded != null) {
+      await _scanInvoice(firstAdded);
+    }
+  }
+
+  /// Reads the invoice photo via the backend's OCR endpoint and pre-fills the
+  /// transaction date, merchant name, and invoice total - but never
+  /// overwrites a value the user already typed, and never blocks/fails the
+  /// upload itself since OCR on a phone-camera receipt is best-effort.
+  Future<void> _scanInvoice(XFile file) async {
+    setState(() => _scanningInvoice = true);
+    try {
+      final api = context.read<ApiClient>();
+      final result = await scanInvoiceReceipt(api, file);
+      if (!mounted || result == null) return;
+      setState(() {
+        if (result.merchantName != null && result.merchantName!.trim().isNotEmpty && _merchantController.text.trim().isEmpty) {
+          _merchantController.text = result.merchantName!.trim();
+        }
+        if (result.total != null && _invoiceTotalController.text.trim().isEmpty) {
+          _invoiceTotalController.text = formatThousands(result.total!.toString());
+        }
+        if (result.invoiceDate != null && _expenseDate == null) {
+          _expenseDate = result.invoiceDate;
+        }
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invoice scanned - please review the pre-filled fields.')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not auto-read the invoice - please fill the fields manually.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scanningInvoice = false);
     }
   }
 
@@ -320,7 +371,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
         'advertiserId': _advertiserIds.first,
         'brandId': _brandIds.first,
         'activityTypeId': _activityTypeId,
-        if (_podId != null) 'podId': _podId,
+        if (_departmentId != null) 'departmentId': _departmentId,
         if (_advertiserIds.length > 1) 'extraAdvertiserIds': _advertiserIds.skip(1).toList(),
         if (_brandIds.length > 1) 'extraBrandIds': _brandIds.skip(1).toList(),
         if (_agencyIds.isNotEmpty) 'extraAgencyIds': _agencyIds,
@@ -378,7 +429,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (_podOptions.isNotEmpty) _buildPodDropdown(),
+                      if (_departmentOptions.isNotEmpty) _buildDepartmentDropdown(),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: _activityTypeId,
@@ -485,7 +536,17 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
                         onRemove: (i) => setState(() => _activityPhotos.removeAt(i)),
                       ),
                       const SizedBox(height: 24),
-                      _sectionTitle('Invoice / Receipt'),
+                      Row(
+                        children: [
+                          _sectionTitle('Invoice / Receipt'),
+                          if (_scanningInvoice) ...[
+                            const SizedBox(width: 8),
+                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                            const SizedBox(width: 6),
+                            Text('Reading invoice...', style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ],
+                      ),
                       PhotoTileRow(
                         files: _invoiceImages,
                         onAdd: _addInvoicePhotos,
@@ -533,13 +594,13 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     );
   }
 
-  Widget _buildPodDropdown() {
+  Widget _buildDepartmentDropdown() {
     return DropdownButtonFormField<String>(
-      initialValue: _podId,
-      decoration: const InputDecoration(labelText: 'POD'),
-      items: _podOptions.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+      initialValue: _departmentId,
+      decoration: const InputDecoration(labelText: 'Department'),
+      items: _departmentOptions.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
       onChanged: (v) {
-        setState(() => _podId = v);
+        setState(() => _departmentId = v);
         _loadCreditCards();
       },
     );

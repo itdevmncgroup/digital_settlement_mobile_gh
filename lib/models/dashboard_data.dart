@@ -1,9 +1,9 @@
-class DashboardPod {
+class DashboardDepartment {
   final String id;
   final String name;
-  DashboardPod({required this.id, required this.name});
-  factory DashboardPod.fromJson(Map<String, dynamic> json) =>
-      DashboardPod(id: json['id'] as String? ?? '', name: json['name'] as String? ?? '');
+  DashboardDepartment({required this.id, required this.name});
+  factory DashboardDepartment.fromJson(Map<String, dynamic> json) =>
+      DashboardDepartment(id: json['id'] as String? ?? '', name: json['name'] as String? ?? '');
 }
 
 /// GET /dashboard/me - tailored to the caller's approval Position (HEAD_POD /
@@ -12,7 +12,9 @@ class DashboardPod {
 class DashboardData {
   final String? positionCode;
   final int pendingApprovalCount;
-  final List<DashboardPod>? pods;
+  // HEAD_POD branch: the Department(s) they're an explicit approver for.
+  final List<DashboardDepartment>? departments;
+  // DEPT_HEAD/DIV_HEAD branch: their own single Department's name.
   final String? departmentName;
   final String? totalSettledAmount;
   final int? approvedExpenseCount;
@@ -21,7 +23,7 @@ class DashboardData {
   DashboardData({
     required this.positionCode,
     required this.pendingApprovalCount,
-    required this.pods,
+    required this.departments,
     required this.departmentName,
     required this.totalSettledAmount,
     required this.approvedExpenseCount,
@@ -33,7 +35,7 @@ class DashboardData {
     return DashboardData(
       positionCode: json['positionCode'] as String?,
       pendingApprovalCount: (json['pendingApprovalCount'] as num?)?.toInt() ?? 0,
-      pods: (json['pods'] as List?)?.map((p) => DashboardPod.fromJson(p as Map<String, dynamic>)).toList(),
+      departments: (json['departments'] as List?)?.map((p) => DashboardDepartment.fromJson(p as Map<String, dynamic>)).toList(),
       departmentName: department?['name'] as String?,
       totalSettledAmount: json['totalSettledAmount'] != null ? '${json['totalSettledAmount']}' : null,
       approvedExpenseCount: (json['approvedExpenseCount'] as num?)?.toInt(),

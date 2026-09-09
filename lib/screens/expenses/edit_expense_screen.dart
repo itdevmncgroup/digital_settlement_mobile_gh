@@ -7,6 +7,7 @@ import '../../models/expense_detail.dart';
 import '../../models/simple_option.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../utils/invoice_ocr.dart';
 import '../../utils/thousands_formatter.dart';
 import '../../widgets/authed_image.dart';
 import '../../widgets/expense_form_widgets.dart';
@@ -14,7 +15,7 @@ import '../../widgets/photo_tile.dart';
 import 'new_expense_screen.dart' show paymentMethods;
 
 /// Mirrors New Expense's layout, pre-filled with the existing Expense's
-/// values. Unit/Advertiser(primary)/Brand(primary)/Activity Type/POD are
+/// values. Unit/Advertiser(primary)/Brand(primary)/Activity Type/Department are
 /// locked once created (UpdateExpenseDto doesn't accept them - see
 /// ExpensesService.update) and shown read-only; everything else (payment,
 /// additional Agency/Advertiser/Brand, participants, photos, invoice total)
@@ -61,6 +62,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   final _picker = ImagePicker();
   final List<XFile> _activityPhotos = [];
   final List<XFile> _invoiceImages = [];
+  bool _scanningInvoice = false;
 
   bool get _isAdmin => context.read<AuthService>().user?.hasAnyRole(['ADMIN']) ?? false;
 
@@ -159,18 +161,18 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     }
   }
 
-  /// 1 POD = 1 credit card (BR) - only the card(s) assigned to this expense's
-  /// POD may be picked. Super Admin is exempt and sees every card.
+  /// 1 Department = 1 credit card (BR) - only the card(s) assigned to this
+  /// expense's Department may be picked. Super Admin is exempt and sees every card.
   Future<void> _loadCreditCards() async {
     final admin = _isAdmin;
-    final podId = widget.expense.podId;
-    if (!admin && podId == null) {
+    final departmentId = widget.expense.departmentId;
+    if (!admin && departmentId == null) {
       if (mounted) setState(() => _creditCardOptions = []);
       return;
     }
     final api = context.read<ApiClient>();
     try {
-      final path = admin ? '/credit-cards' : '/credit-cards?podId=$podId';
+      final path = admin ? '/credit-cards' : '/credit-cards?departmentId=$departmentId';
       final data = await api.get(path) as List;
       if (!mounted) return;
       setState(() {
@@ -230,12 +232,62 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   Future<void> _addInvoicePhotos() async {
     final source = await _pickSource();
     if (source == null) return;
+    final hadNoInvoiceYet = _invoiceImages.isEmpty;
+    XFile? firstAdded;
     if (source == ImageSource.gallery) {
       final files = await _picker.pickMultiImage(imageQuality: 85);
-      if (files.isNotEmpty) setState(() => _invoiceImages.addAll(files));
+      if (files.isNotEmpty) {
+        setState(() => _invoiceImages.addAll(files));
+        firstAdded = files.first;
+      }
     } else {
       final file = await _picker.pickImage(source: source, imageQuality: 85);
-      if (file != null) setState(() => _invoiceImages.add(file));
+      if (file != null) {
+        setState(() => _invoiceImages.add(file));
+        firstAdded = file;
+      }
+    }
+    // Only auto-read the first newly-added invoice photo - later ones are
+    // usually extra pages/angles of the same receipt, not a new one to scan.
+    if (hadNoInvoiceYet && firstAdded != null) {
+      await _scanInvoice(firstAdded);
+    }
+  }
+
+  /// Reads the invoice photo via the backend's OCR endpoint and pre-fills the
+  /// transaction date, merchant name, and invoice total - but never
+  /// overwrites a value already present (typed, or loaded from the existing
+  /// Expense), and never blocks/fails the upload itself since OCR on a
+  /// phone-camera receipt is best-effort.
+  Future<void> _scanInvoice(XFile file) async {
+    setState(() => _scanningInvoice = true);
+    try {
+      final api = context.read<ApiClient>();
+      final result = await scanInvoiceReceipt(api, file);
+      if (!mounted || result == null) return;
+      setState(() {
+        if (result.merchantName != null && result.merchantName!.trim().isNotEmpty && _merchantController.text.trim().isEmpty) {
+          _merchantController.text = result.merchantName!.trim();
+        }
+        if (result.total != null && _invoiceTotalController.text.trim().isEmpty) {
+          _invoiceTotalController.text = formatThousands(result.total!.toString());
+        }
+        if (result.invoiceDate != null && _expenseDate == null) {
+          _expenseDate = result.invoiceDate;
+        }
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invoice scanned - please review the pre-filled fields.')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not auto-read the invoice - please fill the fields manually.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scanningInvoice = false);
     }
   }
 
@@ -474,7 +526,17 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
                       ],
                       PhotoTileRow(files: _activityPhotos, onAdd: _addActivityPhotos, onRemove: (i) => setState(() => _activityPhotos.removeAt(i))),
                       const SizedBox(height: 24),
-                      _sectionTitle('Invoice / Receipt'),
+                      Row(
+                        children: [
+                          _sectionTitle('Invoice / Receipt'),
+                          if (_scanningInvoice) ...[
+                            const SizedBox(width: 8),
+                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                            const SizedBox(width: 6),
+                            Text('Reading invoice...', style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ],
+                      ),
                       if (e.invoices.isNotEmpty && e.invoices.first.files.isNotEmpty) ...[
                         Wrap(
                           spacing: 8,
@@ -534,7 +596,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            if (e.podName != null) _lockedRow('POD', e.podName!),
+            if (e.departmentName != null) _lockedRow('Department', e.departmentName!),
             _lockedRow('Unit', e.unitName),
             _lockedRow('Advertiser', e.advertiserName),
             _lockedRow('Brand', e.brandName),

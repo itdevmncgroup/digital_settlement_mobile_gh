@@ -49,13 +49,21 @@ class _HomeShellState extends State<HomeShell> {
     // Expenses (create/browse own or team submissions) is a Sales-side page -
     // an approver-only role (SUPERVISOR/FINANCE/MANAGEMENT) has no reason to
     // see it, since their entire job on it is covered by the Approvals tab.
-    final canSeeExpenses = user?.hasAnyRole(['SALES', 'SALES_ADMIN', 'ADMIN']) ?? false;
+    // HEAD_POD is the exception: they're an approver by Position, not Role,
+    // but still need a read-only view of their Department's expense list (the
+    // backend already scopes GET /expenses to their Department for this position).
+    final isHeadPod = user?.positionCode == 'HEAD_POD';
+    final canSeeExpenses = (user?.hasAnyRole(['SALES', 'SALES_ADMIN', 'ADMIN']) ?? false) || isHeadPod;
     // BOD sits at (almost always) the end of the chain and can monitor the
     // whole pipeline read-only ahead of their own turn (see ApprovalsListScreen/
     // isMyTurn), so their tab must always show, not just when they currently
-    // have something actionable.
+    // have something actionable. approval.read.all/owndept (e.g. HEAD_POD,
+    // Management) gets the same always-visible monitoring view - the backend's
+    // findPendingFor grants them the same chain-wide lookahead as BOD, just
+    // scoped to all Departments or their own.
     final isBod = user?.positionCode == 'BOD';
-    final showApprovals = isBod || _canApprove;
+    final canReadApprovals = user?.hasAnyPermission(['approval.read.all', 'approval.read.owndept']) ?? false;
+    final showApprovals = isBod || canReadApprovals || _canApprove;
 
     final tabs = <_Tab>[
       _Tab(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard', screen: const DashboardScreen()),

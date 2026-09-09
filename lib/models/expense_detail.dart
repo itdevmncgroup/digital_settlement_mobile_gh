@@ -50,8 +50,8 @@ class ExpenseDetail {
   final String brandId;
   final String brandName;
   final String activityTypeName;
-  final String? podId;
-  final String? podName;
+  final String? departmentId;
+  final String? departmentName;
   final String? settlementNo;
   final List<ExpenseItemDetail> items;
   final List<ExpensePhotoRef> photos;
@@ -86,8 +86,8 @@ class ExpenseDetail {
     required this.brandId,
     required this.brandName,
     required this.activityTypeName,
-    required this.podId,
-    required this.podName,
+    required this.departmentId,
+    required this.departmentName,
     required this.settlementNo,
     required this.items,
     required this.photos,
@@ -107,7 +107,7 @@ class ExpenseDetail {
     final advertiser = json['advertiser'] as Map<String, dynamic>? ?? {};
     final brand = json['brand'] as Map<String, dynamic>? ?? {};
     final activityType = json['activityType'] as Map<String, dynamic>? ?? {};
-    final pod = json['pod'] as Map<String, dynamic>?;
+    final department = json['department'] as Map<String, dynamic>?;
     final creditCard = json['creditCard'] as Map<String, dynamic>?;
     final settlement = json['settlement'] as Map<String, dynamic>?;
     final bankTransactions = (json['bankTransactions'] as List?) ?? [];
@@ -148,8 +148,8 @@ class ExpenseDetail {
       brandId: json['brandId'] as String? ?? '',
       brandName: brand['name'] as String? ?? '',
       activityTypeName: activityType['name'] as String? ?? '',
-      podId: json['podId'] as String?,
-      podName: pod?['name'] as String?,
+      departmentId: json['departmentId'] as String?,
+      departmentName: department?['name'] as String?,
       settlementNo: settlement?['settlementNo'] as String?,
       items: (json['items'] as List? ?? []).map((e) => ExpenseItemDetail.fromJson(e as Map<String, dynamic>)).toList(),
       photos: (json['photos'] as List? ?? []).map((e) => ExpensePhotoRef.fromJson(e as Map<String, dynamic>)).toList(),

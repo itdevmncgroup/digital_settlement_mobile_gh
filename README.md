@@ -6,13 +6,13 @@ JWT), and covers four things from the phone:
 
 - **Login** — `POST /auth/login`, same credentials as web-admin.
 - **New Expense** — Pre-Event picker (or manual Unit/Advertiser/Brand/Activity
-  Type entry when there's no Pre-Event), date/amount/purpose/POD/payment
+  Type entry when there's no Pre-Event), date/amount/purpose/Department/payment
   method/merchant/location, "use my location" via the device GPS, camera or
   gallery photo upload for Foto Kegiatan, and invoice photo/PDF upload with a
   simple merchant/total/tax summary.
 - **Approvals** — pending expense (and Pre-Event) approval steps assigned to
   the signed-in user, with Approve / Reject (reason required).
-- **Settlement** — lists Settlements for the user's POD(s) (or all, for
+- **Settlement** — lists Settlements for the user's Department(s) (or all, for
   Finance/Admin), "Create Settlement" to group the current user's bank-matched
   Expenses, and "Approve (Mark Complete)" for Finance/Admin on a DRAFT
   settlement.

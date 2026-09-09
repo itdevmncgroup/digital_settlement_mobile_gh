@@ -56,8 +56,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               return ErrorView(message: '${snapshot.error}', onRetry: _refresh);
             }
             final d = snapshot.data!;
-            final scopeLabel = d.pods != null && d.pods!.isNotEmpty
-                ? d.pods!.map((p) => p.name).join(', ')
+            final scopeLabel = d.departments != null && d.departments!.isNotEmpty
+                ? d.departments!.map((p) => p.name).join(', ')
                 : d.departmentName;
 
             return ListView(
@@ -85,7 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 12),
                   _StatCard(
                     icon: Icons.public_outlined,
-                    label: 'Total expense (SETTLED) — All PODs',
+                    label: 'Total expense (SETTLED) — All Departments',
                     value: formatCurrency(d.totalSettledAmount ?? '0'),
                   ),
                   const SizedBox(height: 12),

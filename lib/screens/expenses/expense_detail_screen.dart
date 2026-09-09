@@ -49,9 +49,8 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     final api = context.read<ApiClient>();
     try {
       await api.post('/approvals/expense/${widget.expenseId}/approve');
-      _refresh();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Approved')));
+        Navigator.of(context).pop(true);
       }
     } on ApiException catch (e) {
       if (context.mounted) {
@@ -91,9 +90,8 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     final api = context.read<ApiClient>();
     try {
       await api.post('/approvals/expense/${widget.expenseId}/reject', {'reason': reason});
-      _refresh();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rejected')));
+        Navigator.of(context).pop(true);
       }
     } on ApiException catch (e) {
       if (context.mounted) {
@@ -160,7 +158,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                         _row('Sales', e.salesName),
                         _row('Advertiser / Brand', '${e.advertiserName} / ${e.brandName}'),
                         _row('Unit', e.unitName),
-                        if (e.podName != null) _row('POD', e.podName!),
+                        if (e.departmentName != null) _row('Department', e.departmentName!),
                         _row('Date', formatDate(e.expenseDate)),
                         _row('Amount', formatCurrency(e.amount), bold: true),
                         _row('Purpose', e.purpose),

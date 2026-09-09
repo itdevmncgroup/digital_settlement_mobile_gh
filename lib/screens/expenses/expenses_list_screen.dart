@@ -50,8 +50,16 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthService>().user;
-    final canCreate = user?.hasAnyRole(['SALES', 'ADMIN', 'FINANCE']) ?? false;
+    // expense.create.all/owndept (Role/Permission master) lets a caller outside
+    // SALES/ADMIN/FINANCE - e.g. HEAD_POD/Management - submit an Expense too
+    // (scoped server-side to their own Department for .owndept, see
+    // ExpensesService.assertCanCreateForDepartment).
+    final canCreate = (user?.hasAnyRole(['SALES', 'ADMIN', 'FINANCE']) ?? false) ||
+        (user?.hasAnyPermission(['expense.create.all', 'expense.create.owndept']) ?? false);
     final seesAll = user?.hasAnyRole(['ADMIN', 'FINANCE', 'SUPERVISOR', 'MANAGEMENT']) ?? false;
+    // HEAD_POD is neither "all Sales" nor "my own" - the backend scopes their
+    // GET /expenses to just their Department, so the heading should say so.
+    final isHeadPod = user?.positionCode == 'HEAD_POD';
 
     return Scaffold(
       appBar: AppBar(
@@ -65,9 +73,12 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(seesAll ? Icons.groups : Icons.person, size: 14, color: Colors.white70),
+                  Icon(seesAll ? Icons.groups : (isHeadPod ? Icons.groups_outlined : Icons.person), size: 14, color: Colors.white70),
                   const SizedBox(width: 4),
-                  Text(seesAll ? 'All Sales' : 'My Expenses', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    seesAll ? 'All Sales' : (isHeadPod ? 'Department Expenses' : 'My Expenses'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -168,10 +179,10 @@ class _ExpenseCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  if (row.podName != null) ...[
+                  if (row.departmentName != null) ...[
                     Icon(Icons.groups_outlined, size: 14, color: Colors.grey.shade500),
                     const SizedBox(width: 3),
-                    Text(row.podName!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+                    Text(row.departmentName!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
                     const SizedBox(width: 12),
                   ],
                   Icon(row.matched ? Icons.check_circle : Icons.radio_button_unchecked, size: 14, color: row.matched ? Colors.green : Colors.grey.shade400),
