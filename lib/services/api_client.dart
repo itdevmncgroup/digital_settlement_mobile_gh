@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart' show kIsWeb, TargetPlatform, defaultTargetPlatform;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'auth_service.dart';
@@ -20,12 +21,51 @@ MediaType? _mediaTypeForFilename(String filename) {
 
 const String _explicitApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 
+const _secureStorage = FlutterSecureStorage();
+const _apiBaseUrlOverrideKey = 'apiBaseUrlOverride';
+
+/// Runtime override set via the login screen's endpoint-settings (gear icon)
+/// dialog, persisted in secure storage so it survives app restarts. Lets a QA
+/// device point at staging/a colleague's LAN IP without a rebuild. Takes
+/// priority over both the --dart-define default and the per-platform default
+/// below. Must be loaded once at startup via [loadApiBaseUrlOverride] before
+/// any request is made.
+String? apiBaseUrlOverride;
+
+/// A broken/invalidated Keystore entry (common after a reinstall on some
+/// Android versions) makes secure-storage reads throw instead of returning
+/// null - must not propagate, since this runs before runApp() in main() and
+/// an uncaught throw there means the app never draws its first frame (stuck
+/// on the native launch screen forever, indistinguishable from infinite
+/// loading). Falls back to the compile-time/platform default on any error.
+Future<void> loadApiBaseUrlOverride() async {
+  try {
+    final stored = await _secureStorage.read(key: _apiBaseUrlOverrideKey);
+    if (stored != null && stored.isNotEmpty) apiBaseUrlOverride = stored;
+  } catch (e, st) {
+    developer.log('Failed to read apiBaseUrlOverride from secure storage', name: 'api', error: e, stackTrace: st);
+  }
+}
+
+/// Sets or clears (`null`/empty) the endpoint override and persists it
+/// immediately - takes effect on the very next request, no restart needed.
+Future<void> setApiBaseUrlOverride(String? url) async {
+  final trimmed = url?.trim();
+  apiBaseUrlOverride = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  if (apiBaseUrlOverride == null) {
+    await _secureStorage.delete(key: _apiBaseUrlOverrideKey);
+  } else {
+    await _secureStorage.write(key: _apiBaseUrlOverrideKey, value: apiBaseUrlOverride);
+  }
+}
+
 /// Base URL for the NestJS backend (same API web-admin talks to). Override at
-/// build/run time with `--dart-define=API_BASE_URL=http://HOST:3000/api/v1`
-/// (needed for a physical device, which can't reach the dev machine via
-/// localhost/10.0.2.2 - use the dev machine's LAN IP instead).
+/// build/run time with `--dart-define=API_BASE_URL=http://HOST:3000/api/v1`,
+/// or at runtime via [setApiBaseUrlOverride] (needed for a physical device,
+/// which can't reach the dev machine via localhost/10.0.2.2 - use the dev
+/// machine's LAN IP instead).
 ///
-/// Without that override, the default depends on where this build runs:
+/// Without either override, the default depends on where this build runs:
 ///  - Flutter web (`flutter run -d chrome`): the browser IS on the dev
 ///    machine, so `localhost` reaches the backend directly.
 ///  - Android emulator: `10.0.2.2` is the emulator's alias for the host
@@ -36,6 +76,7 @@ const String _explicitApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 /// `defaultTargetPlatform` (unlike dart:io's Platform) is safe to read on
 /// every platform including web, so this needs no conditional imports.
 String get apiBaseUrl {
+  if (apiBaseUrlOverride != null) return apiBaseUrlOverride!;
   if (_explicitApiBaseUrl.isNotEmpty) return _explicitApiBaseUrl;
   if (kIsWeb) return 'http://localhost:3000/api/v1';
   if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:3000/api/v1';

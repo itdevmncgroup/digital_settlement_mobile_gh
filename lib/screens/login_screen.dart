@@ -28,6 +28,41 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _showEndpointSettings() {
+    final controller = TextEditingController(text: apiBaseUrl);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('API Endpoint'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          decoration: const InputDecoration(labelText: 'Base URL', hintText: 'http://HOST:3000/api/v1'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await setApiBaseUrlOverride(null);
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              if (mounted) setState(() {});
+            },
+            child: const Text('Reset to default'),
+          ),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              await setApiBaseUrlOverride(controller.text);
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              if (mounted) setState(() {});
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -69,7 +104,18 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [brandGradientStart, brandGradientEnd]),
         ),
         child: SafeArea(
-          child: Center(
+          child: Stack(
+            children: [
+              Positioned(
+                top: 4,
+                right: 4,
+                child: IconButton(
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+                  tooltip: 'API endpoint',
+                  onPressed: _showEndpointSettings,
+                ),
+              ),
+              Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: ConstrainedBox(
@@ -157,6 +203,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
+          ),
+            ],
           ),
         ),
       ),

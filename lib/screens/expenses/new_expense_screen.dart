@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../models/simple_option.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../utils/format.dart';
 import '../../utils/invoice_ocr.dart';
 import '../../utils/thousands_formatter.dart';
 import '../../widgets/expense_form_widgets.dart';
@@ -364,7 +365,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
       final invoiceTotal = unformatNumber(_invoiceTotalController.text) ?? 0;
 
       final payload = <String, dynamic>{
-        'expenseDate': _expenseDate!.toIso8601String(),
+        'expenseDate': dateOnlyString(_expenseDate!),
         'purpose': _purposeController.text.trim(),
         'amount': invoiceTotal,
         'unitId': unitId,
@@ -589,7 +590,7 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
       onTap: _pickDate,
       child: InputDecorator(
         decoration: const InputDecoration(labelText: 'Expense Date', suffixIcon: Icon(Icons.calendar_today)),
-        child: Text(_expenseDate == null ? 'Select date' : '${_expenseDate!.year}-${_expenseDate!.month.toString().padLeft(2, '0')}-${_expenseDate!.day.toString().padLeft(2, '0')}'),
+        child: Text(_expenseDate == null ? 'Select date' : dateOnlyString(_expenseDate!)),
       ),
     );
   }

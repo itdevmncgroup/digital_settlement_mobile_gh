@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user.dart';
@@ -17,15 +18,27 @@ class AuthService extends ChangeNotifier {
   bool get isLoggedIn => accessToken != null && user != null;
 
   Future<void> loadFromStorage() async {
-    accessToken = await _storage.read(key: 'accessToken');
-    refreshToken = await _storage.read(key: 'refreshToken');
-    final userJson = await _storage.read(key: 'user');
-    if (userJson != null) {
-      try {
-        user = AppUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
-      } catch (_) {
-        user = null;
+    // A broken/invalidated Keystore entry (common after a reinstall on some
+    // Android versions) makes secure-storage reads throw rather than return
+    // null - without this try/catch, `loading` would never flip to false and
+    // AuthGate's spinner would spin forever instead of falling back to the
+    // login screen.
+    try {
+      accessToken = await _storage.read(key: 'accessToken');
+      refreshToken = await _storage.read(key: 'refreshToken');
+      final userJson = await _storage.read(key: 'user');
+      if (userJson != null) {
+        try {
+          user = AppUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        } catch (_) {
+          user = null;
+        }
       }
+    } catch (e, st) {
+      developer.log('Failed to read session from secure storage', name: 'auth', error: e, stackTrace: st);
+      accessToken = null;
+      refreshToken = null;
+      user = null;
     }
     loading = false;
     notifyListeners();

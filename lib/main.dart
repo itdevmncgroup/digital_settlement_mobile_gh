@@ -10,6 +10,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID', null);
+  await loadApiBaseUrlOverride();
   runApp(const DigitalSettlementApp());
 }
 
