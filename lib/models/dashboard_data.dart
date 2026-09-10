@@ -19,6 +19,9 @@ class DashboardData {
   final String? totalSettledAmount;
   final int? approvedExpenseCount;
   final int? approvedSettlementCount;
+  // Sum of Expense.amount whose Settlement has reached COMPLETE - own pod(s)
+  // for SALES/SALES_ADMIN/HEAD_POD, company-wide for every other role.
+  final String? totalExpenseAmount;
 
   DashboardData({
     required this.positionCode,
@@ -28,6 +31,7 @@ class DashboardData {
     required this.totalSettledAmount,
     required this.approvedExpenseCount,
     required this.approvedSettlementCount,
+    required this.totalExpenseAmount,
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
@@ -40,6 +44,7 @@ class DashboardData {
       totalSettledAmount: json['totalSettledAmount'] != null ? '${json['totalSettledAmount']}' : null,
       approvedExpenseCount: (json['approvedExpenseCount'] as num?)?.toInt(),
       approvedSettlementCount: (json['approvedSettlementCount'] as num?)?.toInt(),
+      totalExpenseAmount: json['totalExpenseAmount'] != null ? '${json['totalExpenseAmount']}' : null,
     );
   }
 }

@@ -28,7 +28,7 @@ class DigitalSettlementApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(),
-        themeMode: ThemeMode.dark,
+        themeMode: ThemeMode.light,
         home: const AuthGate(),
       ),
     );

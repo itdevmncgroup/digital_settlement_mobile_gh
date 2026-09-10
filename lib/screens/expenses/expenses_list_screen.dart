@@ -73,11 +73,11 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(seesAll ? Icons.groups : (isHeadPod ? Icons.groups_outlined : Icons.person), size: 14, color: Colors.white70),
+                  Icon(seesAll ? Icons.groups : (isHeadPod ? Icons.groups_outlined : Icons.person), size: 14, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
                   Text(
                     seesAll ? 'All Sales' : (isHeadPod ? 'Department Expenses' : 'My Expenses'),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ],
               ),

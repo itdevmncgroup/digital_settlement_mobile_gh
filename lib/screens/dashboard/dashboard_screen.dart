@@ -59,11 +59,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final scopeLabel = d.departments != null && d.departments!.isNotEmpty
                 ? d.departments!.map((p) => p.name).join(', ')
                 : d.departmentName;
+            final isPodRestricted = d.positionCode == 'HEAD_POD' || (user?.hasAnyRole(['SALES', 'SALES_ADMIN']) ?? false);
+            final expenseScopeLabel = isPodRestricted ? (scopeLabel ?? 'Pod Anda') : 'Seluruh Pod';
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text('Hi, ${user?.name ?? ''}', style: Theme.of(context).textTheme.titleLarge),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Halo, ${user?.name ?? ''}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text('Selamat datang kembali', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ),
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                      child: Text(
+                        user?.name.isNotEmpty == true ? user!.name[0].toUpperCase() : '?',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 _StatCard(
                   icon: Icons.checklist_outlined,
@@ -72,6 +95,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: d.pendingApprovalCount > 0
                       ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ApprovalsListScreen()))
                       : null,
+                ),
+                const SizedBox(height: 12),
+                _StatCard(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Jumlah expense (settlement complete) — $expenseScopeLabel',
+                  value: formatCurrency(d.totalExpenseAmount ?? '0'),
                 ),
                 if (scopeLabel != null) ...[
                   const SizedBox(height: 12),
@@ -129,7 +158,12 @@ class _StatCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

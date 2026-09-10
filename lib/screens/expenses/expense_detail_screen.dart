@@ -263,6 +263,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: FilledButton.icon(
+                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2E9E5B)),
                           onPressed: () => _approve(context),
                           icon: const Icon(Icons.check),
                           label: const Text('Approve'),

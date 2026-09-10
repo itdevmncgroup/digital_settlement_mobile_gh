@@ -248,6 +248,7 @@ class _SettlementApprovalDetailScreenState extends State<SettlementApprovalDetai
                             const SizedBox(width: 12),
                             Expanded(
                               child: FilledButton.icon(
+                                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2E9E5B)),
                                 onPressed: _busy ? null : () => _bulkAct(approve: true),
                                 icon: const Icon(Icons.check),
                                 label: Text('Approve (${_checked.length})'),
