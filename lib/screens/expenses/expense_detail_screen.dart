@@ -9,17 +9,6 @@ import '../../widgets/error_view.dart';
 import '../../widgets/status_badge.dart';
 import 'edit_expense_screen.dart';
 
-const _paymentMethodLabels = {
-  'CREDIT_CARD': 'Credit Card',
-  'GOPAY': 'GoPay',
-  'SHOPEEPAY': 'ShopeePay',
-  'DANA': 'Dana',
-  'OVO': 'OVO',
-  'BANK_TRANSFER': 'Bank Transfer',
-  'CASH': 'Cash',
-  'OTHER': 'Others',
-};
-
 class ExpenseDetailScreen extends StatefulWidget {
   final String expenseId;
   const ExpenseDetailScreen({super.key, required this.expenseId});
@@ -164,10 +153,10 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                         _row('Purpose', e.purpose),
                         if (e.merchantName != null) _row('Merchant', e.merchantName!),
                         if (e.location != null) _row('Location', e.location!),
-                        if (e.paymentMethodType != null)
+                        if (e.paymentMethodId != null)
                           _row(
                             'Payment Method',
-                            '${_paymentMethodLabels[e.paymentMethodType] ?? e.paymentMethodType}'
+                            '${e.paymentMethodName ?? e.paymentMethodId}'
                                 '${e.creditCardLabel != null ? ' (${e.creditCardLabel})' : ''}'
                                 '${e.paymentMethodNote != null ? ' — ${e.paymentMethodNote}' : ''}',
                           ),

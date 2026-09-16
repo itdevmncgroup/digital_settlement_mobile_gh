@@ -45,5 +45,26 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<!-- Custom-scheme deep link fallback (see deep_link_handler.dart) - works
+	     immediately, no Associated Domains verification needed. The
+	     applinks:<app-domain> Associated Domains entitlement (Runner.entitlements)
+	     is what makes the https:// version open the app instead of the browser,
+	     once apple-app-site-association is hosted and Apple Team ID is set - see
+	     the mobile-notifications plan for what's still needed there. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.mncgroup.digitalSettlement.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>digitalsettlement</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

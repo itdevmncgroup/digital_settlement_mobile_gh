@@ -153,6 +153,17 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> delete(String path) async {
+    try {
+      final res = await http.delete(_uri(path), headers: _headers());
+      return _handle('DELETE', path, res);
+    } catch (e, st) {
+      if (e is ApiException) rethrow;
+      _logError('DELETE', path, e, st);
+      throw ApiException(0, 'Could not reach the server at $apiBaseUrl ($e)');
+    }
+  }
+
   /// Uploads one file as multipart form data under the `file` field, same as
   /// the backend's FileInterceptor endpoints (photos, invoice files, OCR
   /// scan, bank-settlement upload).

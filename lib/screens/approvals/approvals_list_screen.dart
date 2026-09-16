@@ -18,11 +18,120 @@ class ApprovalsListScreen extends StatefulWidget {
 
 class _ApprovalsListScreenState extends State<ApprovalsListScreen> {
   late Future<List<ApprovalPendingItem>> _future;
+  bool _selectMode = false;
+  final Set<String> _selectedExpenseIds = {};
+  bool _bulkBusy = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  // Only an expense row that's actually this user's turn can be bulk
+  // approved/rejected - settlement rows go through submitSettlementTier
+  // (member-by-member review) instead of the single approve/reject endpoint.
+  bool _selectable(ApprovalPendingItem item) => item.type == ApprovalItemType.expense && item.isMyTurn;
+
+  void _toggleSelectMode() {
+    setState(() {
+      _selectMode = !_selectMode;
+      _selectedExpenseIds.clear();
+    });
+  }
+
+  void _toggleSelected(ApprovalPendingItem item) {
+    if (!_selectable(item)) return;
+    setState(() {
+      if (_selectedExpenseIds.contains(item.expenseId)) {
+        _selectedExpenseIds.remove(item.expenseId);
+      } else {
+        _selectedExpenseIds.add(item.expenseId!);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<ApprovalPendingItem> rows) {
+    final selectableIds = rows.where(_selectable).map((e) => e.expenseId!).toSet();
+    setState(() {
+      if (_selectedExpenseIds.length == selectableIds.length) {
+        _selectedExpenseIds.clear();
+      } else {
+        _selectedExpenseIds
+          ..clear()
+          ..addAll(selectableIds);
+      }
+    });
+  }
+
+  Future<void> _bulkApprove() async {
+    await _runBulk((api, id) => api.post('/approvals/expense/$id/approve'));
+  }
+
+  Future<void> _bulkReject() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Reject ${_selectedExpenseIds.length} expense(s)'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Reason', hintText: 'Why is this being rejected?'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.length < 3) return;
+              Navigator.of(dialogContext).pop(text);
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted) return;
+    await _runBulk((api, id) => api.post('/approvals/expense/$id/reject', {'reason': reason}));
+  }
+
+  // Backend has no batch approve/reject endpoint (see approvals.controller.ts)
+  // so each selected expense fires its own call. Runs one at a time so one
+  // failure doesn't fire a burst of retries; failures are collected and
+  // reported together instead of aborting the whole batch.
+  Future<void> _runBulk(Future<void> Function(ApiClient api, String id) call) async {
+    final api = context.read<ApiClient>();
+    final ids = _selectedExpenseIds.toList();
+    setState(() => _bulkBusy = true);
+    var success = 0;
+    final failures = <String>[];
+    for (final id in ids) {
+      try {
+        await call(api, id);
+        success++;
+      } on ApiException catch (e) {
+        failures.add(e.message);
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _bulkBusy = false;
+      _selectMode = false;
+      _selectedExpenseIds.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failures.isEmpty
+              ? '$success expense(s) processed'
+              : '$success succeeded, ${failures.length} failed: ${failures.first}',
+        ),
+      ),
+    );
+    _refresh();
   }
 
   Future<List<ApprovalPendingItem>> _load() async {
@@ -45,6 +154,10 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> {
   }
 
   Future<void> _open(ApprovalPendingItem item) async {
+    if (_selectMode) {
+      _toggleSelected(item);
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => item.type == ApprovalItemType.settlement
@@ -64,7 +177,14 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> {
     final user = context.watch<AuthService>().user;
     final isViewerOnly = user?.positionCode == 'BOD' || (user?.hasAnyPermission(['approval.read.all', 'approval.read.owndept']) ?? false);
     return Scaffold(
-      appBar: AppBar(title: const Text('Approvals')),
+      appBar: AppBar(
+        title: Text(_selectMode ? '${_selectedExpenseIds.length} selected' : 'Approvals'),
+        leading: _selectMode ? IconButton(icon: const Icon(Icons.close), onPressed: _bulkBusy ? null : _toggleSelectMode) : null,
+        actions: [
+          if (!_selectMode)
+            IconButton(icon: const Icon(Icons.checklist), tooltip: 'Select', onPressed: _toggleSelectMode),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<List<ApprovalPendingItem>>(
@@ -92,15 +212,64 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> {
                 ],
               );
             }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-              itemCount: rows.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _ApprovalCard(item: rows[i], onTap: () => _open(rows[i])),
+            final selectableCount = rows.where(_selectable).length;
+            return Column(
+              children: [
+                if (_selectMode && selectableCount > 0)
+                  CheckboxListTile(
+                    value: _selectedExpenseIds.length == selectableCount,
+                    onChanged: _bulkBusy ? null : (_) => _toggleSelectAll(rows),
+                    title: Text('Select all ($selectableCount)'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                  ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) => _ApprovalCard(
+                      item: rows[i],
+                      onTap: () => _open(rows[i]),
+                      selectMode: _selectMode,
+                      selectable: _selectable(rows[i]),
+                      selected: _selectedExpenseIds.contains(rows[i].expenseId),
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
       ),
+      bottomNavigationBar: _selectMode && _selectedExpenseIds.isNotEmpty
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _bulkBusy ? null : _bulkReject,
+                        icon: const Icon(Icons.close),
+                        label: const Text('Reject'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _bulkBusy ? null : _bulkApprove,
+                        icon: _bulkBusy
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.check),
+                        label: const Text('Approve'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -108,7 +277,16 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> {
 class _ApprovalCard extends StatelessWidget {
   final ApprovalPendingItem item;
   final VoidCallback onTap;
-  const _ApprovalCard({required this.item, required this.onTap});
+  final bool selectMode;
+  final bool selectable;
+  final bool selected;
+  const _ApprovalCard({
+    required this.item,
+    required this.onTap,
+    this.selectMode = false,
+    this.selectable = false,
+    this.selected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -116,16 +294,27 @@ class _ApprovalCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+        side: BorderSide(color: selected ? Theme.of(context).colorScheme.primary : Colors.grey.withValues(alpha: 0.15)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: selectMode && !selectable ? null : onTap,
         child: Opacity(
-          opacity: item.isMyTurn ? 1 : 0.6,
+          opacity: !item.isMyTurn || (selectMode && !selectable) ? 0.6 : 1,
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: item.type == ApprovalItemType.settlement ? _buildSettlement(context) : _buildExpense(context),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (selectMode) ...[
+                  Checkbox(value: selected, onChanged: selectable ? (_) => onTap() : null),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: item.type == ApprovalItemType.settlement ? _buildSettlement(context) : _buildExpense(context),
+                ),
+              ],
+            ),
           ),
         ),
       ),

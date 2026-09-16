@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/expense_detail.dart';
+import '../../models/payment_method_option.dart';
 import '../../models/simple_option.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
@@ -13,7 +14,6 @@ import '../../utils/thousands_formatter.dart';
 import '../../widgets/authed_image.dart';
 import '../../widgets/expense_form_widgets.dart';
 import '../../widgets/photo_tile.dart';
-import 'new_expense_screen.dart' show paymentMethods;
 
 /// Mirrors New Expense's layout, pre-filled with the existing Expense's
 /// values. Unit/Advertiser(primary)/Brand(primary)/Activity Type/Department are
@@ -42,11 +42,15 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   List<SimpleOption> _agencyOptions = [];
   List<SimpleOption> _unitOptions = [];
   List<Map<String, String>> _creditCardOptions = [];
+  List<PaymentMethodOption> _paymentMethodOptions = [];
+
+  String? get _selectedPaymentMethodCode =>
+      _paymentMethodOptions.where((m) => m.id == _paymentMethodId).firstOrNull?.code;
 
   late List<String> _advertiserIds; // additional advertisers only (primary is locked)
   late List<String> _brandIds; // additional brands only (primary is locked)
   late List<String> _agencyIds;
-  String? _paymentMethodType;
+  String? _paymentMethodId;
   String? _creditCardId;
   late final TextEditingController _paymentNoteController;
   late final TextEditingController _merchantController;
@@ -74,7 +78,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     _advertiserIds = e.extraAdvertisers.map((a) => a.id).toList();
     _brandIds = e.extraBrands.map((b) => b.id).toList();
     _agencyIds = e.extraAgencies.map((a) => a.id).toList();
-    _paymentMethodType = e.paymentMethodType;
+    _paymentMethodId = e.paymentMethodId;
     _creditCardId = e.creditCardId;
     _paymentNoteController = TextEditingController(text: e.paymentMethodNote ?? '');
     _merchantController = TextEditingController(text: e.merchantName ?? '');
@@ -124,10 +128,16 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     });
     final api = context.read<ApiClient>();
     try {
-      final results = await Future.wait([api.get('/advertisers'), api.get('/agencies'), api.get('/units')]);
+      final results = await Future.wait([
+        api.get('/advertisers?active=true'),
+        api.get('/agencies?active=true'),
+        api.get('/units?active=true'),
+        api.get('/payment-methods?active=true'),
+      ]);
       _advertiserOptions = (results[0] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _agencyOptions = (results[1] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
       _unitOptions = (results[2] as List).map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
+      _paymentMethodOptions = (results[3] as List).map((e) => PaymentMethodOption.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
       _loadError = e.message;
     } catch (e) {
@@ -152,7 +162,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     }
     final api = context.read<ApiClient>();
     try {
-      final data = await api.get('/brands?advertiserIds=${ids.join(',')}') as List;
+      final data = await api.get('/brands?advertiserIds=${ids.join(',')}&active=true') as List;
       setState(() {
         _brandOptions = data.map((e) => SimpleOption.fromJson(e as Map<String, dynamic>)).toList();
         _brandIds = _brandIds.where((id) => _brandOptions.any((b) => b.id == id)).toList();
@@ -173,7 +183,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     }
     final api = context.read<ApiClient>();
     try {
-      final path = admin ? '/credit-cards' : '/credit-cards?departmentId=$departmentId';
+      final path = admin ? '/credit-cards?active=true' : '/credit-cards?departmentId=$departmentId&active=true';
       final data = await api.get(path) as List;
       if (!mounted) return;
       setState(() {
@@ -353,8 +363,8 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         if (_expenseDate != null) 'expenseDate': dateOnlyString(_expenseDate!),
         'purpose': _purposeController.text.trim(),
         'amount': invoiceTotal,
-        'paymentMethodType': _paymentMethodType,
-        if (_paymentMethodType == 'CREDIT_CARD') 'creditCardId': _creditCardId,
+        'paymentMethodId': _paymentMethodId,
+        if (_selectedPaymentMethodCode == 'CORPORATE_CARD') 'creditCardId': _creditCardId,
         'paymentMethodNote': _paymentNoteController.text.trim().isEmpty ? null : _paymentNoteController.text.trim(),
         'merchantName': _merchantController.text.trim().isEmpty ? null : _merchantController.text.trim(),
         'location': _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
@@ -617,33 +627,34 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
       );
 
   Widget _buildPaymentMethod() {
+    final code = _selectedPaymentMethodCode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _paymentMethodType,
+          initialValue: _paymentMethodId,
           decoration: const InputDecoration(labelText: 'Payment Method (optional)'),
-          items: paymentMethods.map((m) => DropdownMenuItem(value: m.$1, child: Text(m.$2))).toList(),
+          items: _paymentMethodOptions.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
           onChanged: (v) => setState(() {
-            _paymentMethodType = v;
+            _paymentMethodId = v;
             _creditCardId = null;
             _paymentNoteController.clear();
           }),
         ),
-        if (_paymentMethodType == 'CREDIT_CARD') ...[
+        if (code == 'CORPORATE_CARD') ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _creditCardId,
-            decoration: const InputDecoration(labelText: 'Credit Card'),
+            decoration: const InputDecoration(labelText: 'Corporate Card'),
             items: _creditCardOptions.map((c) => DropdownMenuItem(value: c['id'], child: Text(c['label']!, overflow: TextOverflow.ellipsis))).toList(),
             onChanged: (v) => setState(() => _creditCardId = v),
           ),
         ],
-        if (_paymentMethodType != null && _paymentMethodType != 'CREDIT_CARD' && _paymentMethodType != 'CASH' && _paymentMethodType != 'BANK_TRANSFER') ...[
+        if (code != null && code != 'CORPORATE_CARD') ...[
           const SizedBox(height: 12),
           TextFormField(
             controller: _paymentNoteController,
-            decoration: InputDecoration(labelText: _paymentMethodType == 'OTHER' ? 'Please specify' : 'Account / Phone Number (optional)'),
+            decoration: const InputDecoration(labelText: 'Note (optional)'),
           ),
         ],
       ],

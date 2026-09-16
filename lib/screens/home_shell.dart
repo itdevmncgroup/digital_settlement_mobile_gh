@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../main.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/notifications_service.dart';
+import '../services/push_notifications.dart';
 import 'approvals/approvals_list_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'expenses/expenses_list_screen.dart';
@@ -27,6 +30,9 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _checkApprovalAccess();
+    final notifications = context.read<NotificationsService>();
+    notifications.refresh();
+    setupPushNotifications(navigatorKey: rootNavigatorKey, notifications: notifications);
   }
 
   Future<void> _checkApprovalAccess() async {

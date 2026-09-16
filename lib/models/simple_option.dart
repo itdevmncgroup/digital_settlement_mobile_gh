@@ -1,5 +1,5 @@
 /// Generic id+name master-data option - Departments, Units, Activity Types,
-/// Advertisers, Brands, Credit Cards (label pre-formatted by the caller).
+/// Advertisers, Brands, Corporate Cards (label pre-formatted by the caller).
 class SimpleOption {
   final String id;
   final String name;

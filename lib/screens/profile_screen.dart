@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
+import '../services/notifications_service.dart';
 import '../theme.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -82,7 +84,14 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 OutlinedButton.icon(
-                  onPressed: () => auth.logout(),
+                  onPressed: () async {
+                    // Best-effort, must never block logout (see
+                    // NotificationsService.unregisterDeviceToken doc) - a slow
+                    // or hanging network call here must not delay clearing
+                    // the local session.
+                    unawaited(context.read<NotificationsService>().unregisterDeviceToken());
+                    await auth.logout();
+                  },
                   icon: const Icon(Icons.logout),
                   label: const Text('Log out'),
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),

@@ -39,7 +39,9 @@ class ExpenseDetail {
   final String amount;
   final String? merchantName;
   final String? location;
-  final String? paymentMethodType;
+  final String? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
   final String? paymentMethodNote;
   final String? creditCardLabel;
   final String? creditCardId;
@@ -75,7 +77,9 @@ class ExpenseDetail {
     required this.amount,
     required this.merchantName,
     required this.location,
-    required this.paymentMethodType,
+    required this.paymentMethodId,
+    required this.paymentMethodCode,
+    required this.paymentMethodName,
     required this.paymentMethodNote,
     required this.creditCardLabel,
     required this.creditCardId,
@@ -109,6 +113,7 @@ class ExpenseDetail {
     final activityType = json['activityType'] as Map<String, dynamic>? ?? {};
     final department = json['department'] as Map<String, dynamic>?;
     final creditCard = json['creditCard'] as Map<String, dynamic>?;
+    final paymentMethod = json['paymentMethod'] as Map<String, dynamic>?;
     final settlement = json['settlement'] as Map<String, dynamic>?;
     final bankTransactions = (json['bankTransactions'] as List?) ?? [];
     final matched = bankTransactions.any((t) => ['AUTO_MATCHED', 'MANUAL_MATCHED'].contains((t as Map)['status']));
@@ -137,7 +142,9 @@ class ExpenseDetail {
       amount: '${json['amount'] ?? '0'}',
       merchantName: json['merchantName'] as String?,
       location: json['location'] as String?,
-      paymentMethodType: json['paymentMethodType'] as String?,
+      paymentMethodId: json['paymentMethodId'] as String?,
+      paymentMethodCode: paymentMethod?['code'] as String?,
+      paymentMethodName: paymentMethod?['name'] as String?,
       paymentMethodNote: json['paymentMethodNote'] as String?,
       creditCardLabel: creditCard != null ? '${creditCard['bank']} •••• ${creditCard['last4']}' : null,
       creditCardId: json['creditCardId'] as String?,

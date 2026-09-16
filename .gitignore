@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase project config (push notifications) - per-developer/per-environment,
+# not a shared build artifact. Get these from the Firebase console
+# (project "digitalsettlement-e5691") if you need to rebuild without them.
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
